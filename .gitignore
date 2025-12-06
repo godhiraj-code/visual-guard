@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.pytest_cache/
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# Project specific
+visual_report.html
+tests/snapshots/
+tests/diffs/
+# We explicitly want to commit tests/baselines/ so other developers share the same truth
+
+# v0.2.0 Dev Artifacts
+env_v020/
+tests_v020/
+tests_browser/
+*.png
+!tests/baselines/*.png
+!tests_browser/baselines/*.png
+!src/**/*.png
+
+# Agent / Local Docs
+.agent/
+CASE_STUDY.md
