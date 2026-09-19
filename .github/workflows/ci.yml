@@ -26,7 +26,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .
         # Ensure dev/test requirements are installed
-        pip install scikit-image numpy imagehash pillow selenium
+        pip install pytest scikit-image numpy imagehash pillow selenium
+
+    - name: Run unit tests
+      run: python -m pytest -q
 
     - name: Run Verification Script
       run: |
