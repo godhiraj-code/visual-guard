@@ -53,7 +53,8 @@ visual.assert_matches(driver, "homepage")
 
 # 4. Compare using SSIM (Structural Similarity)
 # Useful for handling minor rendering differences across browsers
-visual.assert_matches(driver, "homepage_ssim", method="ssim", threshold=0.95)
+# SSIM uses maximum difference percentage: 5.0 accepts similarity >= 0.95.
+visual.assert_matches(driver, "homepage_ssim", method="ssim", threshold=5.0)
 
 # 5. Compare using pHash (Perceptual Hash)
 # Best for ignoring minor color shifts or anti-aliasing noise
@@ -99,5 +100,5 @@ reporter.generate("visual_report.html")
 | Method | Best For | Threshold | Note |
 |--------|----------|-----------|------|
 | **pixel** | Icons, Logos, Strict UI elements | 0.0 - 100.0 (Percent diff) | Default. Very sensitive. |
-| **ssim** | Complex layouts, Text blocks | 0.0 - 1.0 (Similarity score) | Requires `scikit-image`. Best for general UI. |
+| **ssim** | Complex layouts, Text blocks | 0.0 - 100.0 (Percent difference) | `5.0` accepts an SSIM similarity score of 0.95 or better. Requires `scikit-image`. |
 | **phash** | Dynamic content, Cross-browser | 0 - 64 (Hamming distance) | Extremely robust to minor pixel shifts. |

@@ -1,6 +1,8 @@
 import os
 import time
 import functools
+import math
+from numbers import Real
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw
 from io import BytesIO
@@ -95,52 +97,15 @@ class VisualTester:
         x, y, w, h = region
         return image.crop((x, y, x + w, y + h))
 
-    def assert_matches(self, image_data, name, threshold=0.1, exclude_regions=None):
-        """
-        Compares the provided image against the baseline.
-        
-        Args:
-            image_data: The current screenshot (path, bytes, or WebElement).
-            name: Unique name for the test case.
-            threshold: Allowed pixel difference percentage (0.0 to 100.0).
-            exclude_regions: List of (x, y, w, h) tuples to ignore.
-            
-        Returns:
-            bool: True if matches (or new baseline created), False otherwise.
-        """
-        current_image = self._process_image(image_data)
-        
-        # Apply masking if needed
-        if exclude_regions:
-            current_image = self._mask_regions(current_image, exclude_regions)
+    @staticmethod
+    def _validate_threshold(method, threshold):
+        """Validate the method-specific maximum allowed difference."""
+        if not isinstance(threshold, Real) or not math.isfinite(float(threshold)):
+            raise ValueError("threshold must be a finite number")
 
-        baseline_path = os.path.join(self.baseline_dir, f"{name}.png")
-        snapshot_path = os.path.join(self.snapshot_dir, f"{name}.png")
-        diff_path = os.path.join(self.diff_dir, f"{name}_diff.png")
-
-        # Save current snapshot
-        current_image.save(snapshot_path)
-
-        # 1. First Run: Create Baseline
-        if not os.path.exists(baseline_path):
-            current_image.save(baseline_path)
-            logger.info(f"Baseline created for '{name}' at {baseline_path}")
-            return True
-
-        # 2. Compare
-        baseline_image = Image.open(baseline_path).convert("RGB")
-        
-        # Ensure dimensions match
-        if current_image.size != baseline_image.size:
-            logger.error(f"Image dimensions mismatch for '{name}': {current_image.size} vs {baseline_image.size}")
-            # Resize baseline to match current (simple approach, or fail)
-            # For strict testing, we should probably fail or resize current to baseline.
-            # Let's resize current to match baseline for comparison sake if close? 
-            # No, strict fail is better for visual regression.
-            # But to generate a diff, we need same size.
-            current_image = current_image.resize(baseline_image.size)
-
-        # Calculate difference
+        maximum = 64 if method == "phash" else 100
+        if not 0 <= float(threshold) <= maximum:
+            raise ValueError(f"threshold for {method} must be between 0 and {maximum}")
     def _compare_pixels(self, img1, img2, threshold):
         """Pixel-by-pixel comparison."""
         diff = ImageChops.difference(img1, img2)
@@ -164,16 +129,18 @@ class VisualTester:
         img2_gray = np.array(img2.convert("L"))
         
         score, diff_map = ssim(img1_gray, img2_gray, full=True)
-        # SSIM score is -1 to 1. 1 means identical.
-        # We want difference to match our threshold logic (0 is perfect, 100 is bad).
-        # Typically SSIM >= 0.95 is good.
-        # Let's map score to diff percent: (1 - score) * 100
+        # Preserve the public difference-threshold contract used by every method:
+        # 0 is identical, and larger values permit more visual change. For example,
+        # threshold=5 accepts SSIM scores of 0.95 or better.
         diff_percent = (1 - score) * 100
         
         # Create diff image from diff_map
         diff_image = Image.fromarray((diff_map * 255).astype(np.uint8))
         
-        return diff_percent <= threshold, diff_percent, diff_image
+        passed = diff_percent <= threshold or math.isclose(
+            diff_percent, float(threshold), rel_tol=1e-12, abs_tol=1e-12
+        )
+        return passed, diff_percent, diff_image
 
     def _compare_phash(self, img1, img2, threshold):
         """Perceptual Hash comparison."""
@@ -195,7 +162,8 @@ class VisualTester:
         Args:
             image_data: The current screenshot (path, bytes, or WebElement).
             name: Unique name for the test case.
-            threshold: Allowed difference (Percent for pixel/ssim, Hamming distance for phash).
+            threshold: Maximum allowed difference. Pixel and SSIM use percentage
+                points from 0 to 100; pHash uses Hamming distance from 0 to 64.
             exclude_regions: List of (x, y, w, h) rectangles or [(x,y),...] polygons.
             method: 'pixel', 'ssim', or 'phash'.
             
@@ -203,6 +171,10 @@ class VisualTester:
             bool: True if match.
         """
         try:
+            if method not in {"pixel", "ssim", "phash"}:
+                raise ValueError(f"Unknown comparison method: {method}")
+            self._validate_threshold(method, threshold)
+
             current_image = self._process_image(image_data)
             
             # Apply masking
@@ -244,9 +216,6 @@ class VisualTester:
                 passed, diff_val, diff_img = self._compare_ssim(current_image, baseline_image, threshold)
             elif method == "phash":
                 passed, diff_val, diff_img = self._compare_phash(current_image, baseline_image, threshold)
-            else:
-                raise ValueError(f"Unknown comparison method: {method}")
-
             if not passed:
                 logger.error(f"Visual check failed ({method}) for '{name}'. Val: {diff_val:.2f} > {threshold}")
                 if diff_img:
