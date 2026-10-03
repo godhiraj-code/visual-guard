@@ -93,10 +93,11 @@ class SimpleReporter:
         </html>
         """
         
-        template = Template(template_str)
+        # Test names and error messages can contain page-controlled HTML.
+        template = Template(template_str, autoescape=True)
         html_content = template.render(title=self.title, results=self.results)
         
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         
         logger.info(f"Report generated at {os.path.abspath(output_path)}")
