@@ -16,10 +16,17 @@ from .exceptions import VisualGuardError, ImageLoadError, ComparisonError, Basel
 
 logger = setup_logger("visual_guard.visual")
 
-@functools.lru_cache(maxsize=32)
 def _load_image_file(path):
-    """Cached image loader."""
-    return Image.open(path).convert("RGB")
+    """Reuse decoded images until their file changes."""
+    absolute = os.path.abspath(path)
+    stat = os.stat(absolute)
+    return _load_image_version(absolute, stat.st_mtime_ns, stat.st_size).copy()
+
+
+@functools.lru_cache(maxsize=32)
+def _load_image_version(path, modified_ns, size):
+    with Image.open(path) as image:
+        return image.convert("RGB")
 
 class VisualTester:
     """
@@ -194,7 +201,7 @@ class VisualTester:
 
             # Use cached loader for baseline if possible, then copy for masking
             # But here we just load
-            baseline_image = _load_image_file(baseline_path).copy() # Copy to avoid mutating cached
+            baseline_image = _load_image_file(baseline_path)
             
             # Apply masking to baseline as well so we compare black-to-black (ignored)
             if exclude_regions:
